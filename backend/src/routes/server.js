@@ -42,26 +42,118 @@ app.set("trust proxy", 1);
 const PORT =
   process.env.PORT || 5001;
 
+// ========================================
+// ORIGIN HELPERS
+// ========================================
+
+const normalizeOrigin = (value) => {
+  if (!value) {
+    return "";
+  }
+
+  return value
+    .trim()
+    .replace(/\/+$/, "");
+};
+
+const CLIENT_URL =
+  normalizeOrigin(
+    process.env.CLIENT_URL
+  );
+
 const isAllowedOrigin = (origin) => {
+  // Postman, Render health check и т.д.
   if (!origin) {
     return true;
   }
 
-  if (origin === "http://localhost:5173") {
-    return true;
-  }
+  const normalizedOrigin =
+    normalizeOrigin(origin);
 
-  if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) {
-    return true;
-  }
-
+  // Локальная разработка
   if (
-    origin.endsWith(".umessage-4yc.pages.dev")
+    normalizedOrigin ===
+    "http://localhost:5173"
   ) {
     return true;
   }
 
+  // Главный production frontend
+  if (
+    CLIENT_URL &&
+    normalizedOrigin === CLIENT_URL
+  ) {
+    return true;
+  }
+
+  // Cloudflare Pages production + preview deployments
+  try {
+    const url =
+      new URL(normalizedOrigin);
+
+    if (
+      url.protocol === "https:" &&
+      (
+        url.hostname ===
+          "umessage-4yc.pages.dev" ||
+        url.hostname.endsWith(
+          ".umessage-4yc.pages.dev"
+        )
+      )
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
   return false;
+};
+
+// ========================================
+// CORS OPTIONS
+// ========================================
+
+const corsOptions = {
+  origin: (
+    origin,
+    callback
+  ) => {
+    if (
+      isAllowedOrigin(origin)
+    ) {
+      return callback(
+        null,
+        true
+      );
+    }
+
+    console.log(
+      "❌ CORS blocked:",
+      origin
+    );
+
+    return callback(
+      null,
+      false
+    );
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
 };
 
 // ========================================
@@ -69,40 +161,12 @@ const isAllowedOrigin = (origin) => {
 // ========================================
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        return callback(null, true);
-      }
+  cors(corsOptions)
+);
 
-      console.log(
-        "❌ CORS blocked:",
-        origin
-      );
-
-      return callback(
-        new Error(
-          "Not allowed by CORS"
-        )
-      );
-    },
-
-    credentials: true,
-
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
-
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-    ],
-  })
+app.options(
+  "*",
+  cors(corsOptions)
 );
 
 // ========================================
@@ -172,6 +236,10 @@ app.get(
         environment:
           process.env.NODE_ENV ||
           "development",
+
+        clientUrl:
+          CLIENT_URL ||
+          "not configured",
       });
   }
 );
@@ -266,7 +334,7 @@ const startServer =
 
           console.log(
             `🔗 Client URL: ${
-              process.env.CLIENT_URL ||
+              CLIENT_URL ||
               "http://localhost:5173"
             }`
           );
