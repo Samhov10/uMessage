@@ -42,14 +42,27 @@ app.set("trust proxy", 1);
 const PORT =
   process.env.PORT || 5001;
 
-// ========================================
-// ALLOWED ORIGINS
-// ========================================
+const isAllowedOrigin = (origin) => {
+  if (!origin) {
+    return true;
+  }
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  process.env.CLIENT_URL,
-].filter(Boolean);
+  if (origin === "http://localhost:5173") {
+    return true;
+  }
+
+  if (process.env.CLIENT_URL && origin === process.env.CLIENT_URL) {
+    return true;
+  }
+
+  if (
+    origin.endsWith(".umessage-4yc.pages.dev")
+  ) {
+    return true;
+  }
+
+  return false;
+};
 
 // ========================================
 // CORS
@@ -58,25 +71,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Разрешаем запросы без Origin:
-      // Render health check, Postman и т.д.
-
-      if (!origin) {
-        return callback(
-          null,
-          true
-        );
-      }
-
-      if (
-        allowedOrigins.includes(
-          origin
-        )
-      ) {
-        return callback(
-          null,
-          true
-        );
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
       }
 
       console.log(
